@@ -37,7 +37,26 @@ CRITICAL RULES:
 - Normalize skill names (e.g., "JS" → "JavaScript")
 - Calculate total experience from dates
 - Respond ONLY with valid JSON matching the schema
-- Do not include any text outside the JSON object"""
+- Do not include any text outside the JSON object
+
+EDUCATION RELEVANCE CLASSIFICATION RULES (STRICT):
+- You must assign EXACTLY ONE value to education_relevance.
+- Choose ONLY from: Highly Relevant, Relevant, Somewhat Relevant, Not Relevant.
+- Use the MOST relevant degree only if multiple degrees are present.
+- Decision order (first match wins):
+  1. Highly Relevant:
+     Degree field exactly matches the job role or is a direct prerequisite
+     (e.g., Computer Science for Software Developer).
+  2. Relevant:
+     Degree is closely related and commonly accepted for the role
+     (e.g., Information Technology, Software Engineering).
+  3. Somewhat Relevant:
+     Degree is indirectly related or provides transferable skills
+     (e.g., Electronics, Mechanical for software roles).
+  4. Not Relevant:
+     Degree has no meaningful relationship to the job role.
+- When uncertain, choose the LOWER relevance category.
+- Do NOT explain the choice. Return the label only."""
 
 	user_prompt = f"""Parse this resume and extract structured information.
 
@@ -72,7 +91,7 @@ OUTPUT SCHEMA (respond with valid JSON only):
     }}
   ],
   "certifications": ["cert1", "cert2"],
-  "education_relevance": "Highly Relevant|Relevant|Somewhat Relevant|Not Relevant",
+  "education_relevance": "Highly Relevant| Relevant| Somewhat Relevant| Not Relevant",
   "summary": "Brief 2-3 sentence professional summary",
   "confidence_score": <0.0-1.0>
 }}
