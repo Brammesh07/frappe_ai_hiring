@@ -3,7 +3,7 @@
 
 """
 LLM Client
-Handles communication with OpenAI-compatible APIs + Ollama (/api/chat)
+Handles communication with OpenAI-compatible APIs
 """
 
 import frappe
@@ -67,7 +67,7 @@ class LLMClient:
 				temperature=temperature,
 				max_tokens=max_tokens,
 			)
-
+			print(json.dumps(payload, indent=2))
 			# Make API call
 			url = self._get_endpoint_url(config)
 			response = requests.post(
@@ -114,34 +114,23 @@ class LLMClient:
 		"""Build request headers"""
 		headers = {"Content-Type": "application/json"}
 
-		# OpenAI-compatible APIs typically use Bearer token auth
 		if config.get("api_key"):
 			headers["Authorization"] = f"Bearer {config['api_key']}"
 
 		return headers
 
 	def _get_endpoint_url(self, config: Dict[str, Any]) -> str:
-		"""
-		Get API endpoint URL
+		"""Get API endpoint URL"""
+		base_url = config.get("api_base_url", "https://api.openai.com/v1")
 
-		Supports:
-		- Ollama:        http://host:11434/api/chat
-		- OpenAI style:  https://api.openai.com/v1/chat/completions
-		- Other gateways: base + /chat/completions
-		"""
-		base_url = (config.get("api_base_url") or "https://api.openai.com/v1").rstrip("/")
-		provider = (config.get("provider") or "").strip().lower()
+		# Remove trailing slash
+		base_url = base_url.rstrip("/")
 
-		# If user already provided full endpoint, return it as-is
-		if base_url.endswith("/api/chat") or base_url.endswith("/chat/completions"):
-			return base_url
-
-		# Provider-based routing
-		if provider in ("ollama", "local-ollama"):
+		# For OpenAI-compatible APIs
+		if "/api/chat" not in base_url:
 			return f"{base_url}/api/chat"
 
-		# Default: OpenAI-compatible chat completions
-		return f"{base_url}/chat/completions"
+		return base_url
 
 	def _build_payload(
 		self,
@@ -159,39 +148,33 @@ class LLMClient:
 
 		messages.append({"role": "user", "content": prompt})
 
-		payload: Dict[str, Any] = {
+		payload = {
 			"model": config.get("model"),
 			"messages": messages,
-			"temperature": temperature if temperature is not None else config.get("temperature", 0.2),
-			"max_tokens": max_tokens if max_tokens is not None else config.get("max_tokens", 2000),
-			# keep non-streaming by default (useful for Ollama and many gateways)
+			"temperature": temperature or config.get("temperature", 0.2),
+			"max_tokens": max_tokens or config.get("max_tokens", 2000),
 			"stream": False,
 		}
 
 		return payload
 
 	def _extract_content(self, response: Dict[str, Any], config: Dict[str, Any]) -> str:
-		"""Extract content from API response (OpenAI + Ollama)"""
+		"""Extract content from API response"""
+		provider = config.get("provider", "OpenAI")
 
-		# OpenAI / OpenAI-compatible format
-		if "choices" in response and response.get("choices"):
-			try:
-				return response["choices"][0]["message"]["content"]
-			except Exception:
-				pass
+		# Standard OpenAI format
+		if "choices" in response and len(response["choices"]) > 0:
+			return response["choices"][0]["message"]["content"]
 
 		# Ollama /api/chat format (non-streaming)
-		# Example: {"model":"...", "message":{"role":"assistant","content":"..."} , ...}
-		if isinstance(response.get("message"), dict) and "content" in response["message"]:
+		if "message" in response and "content" in response["message"]:
 			return response["message"]["content"]
 
-		# Some APIs might return direct content
-		if "content" in response and isinstance(response["content"], str):
+		# Fallback
+		if "content" in response:
 			return response["content"]
 
-		frappe.throw(
-			f"Unable to extract content from API response. Response keys: {list(response.keys())}"
-		)
+		frappe.throw(f"Unable to extract content from API response. Response keys: {list(response.keys())}")
 
 	def _parse_json_response(self, content: str) -> Dict[str, Any]:
 		"""
@@ -204,9 +187,9 @@ class LLMClient:
 		except json.JSONDecodeError:
 			pass
 
+		# Try to extract JSON from markdown code block
 		import re
 
-		# Try to extract JSON from markdown code block
 		json_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", content, re.DOTALL)
 		if json_match:
 			try:
@@ -228,7 +211,7 @@ class LLMClient:
 		"""Test API connection"""
 		try:
 			response = self.call_llm(
-				prompt='Respond with: {"status": "ok", "message": "Connection successful"}',
+				prompt="Respond with: {\"status\": \"ok\", \"message\": \"Connection successful\"}",
 				system_prompt="You are a test assistant. Respond only with valid JSON.",
 				operation="Other",
 			)
